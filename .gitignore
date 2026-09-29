@@ -1,39 +1,123 @@
-# Prerequisites
-*.d
+# Прекомпилированные заголовки
+*.gch
+*.pch
 
-# Compiled Object files
+# Объектные файлы
 *.slo
 *.lo
 *.o
 *.obj
 
-# Precompiled Headers
-*.gch
-*.pch
-
-# Compiled Dynamic libraries
+# Динамические библиотеки
 *.so
 *.dylib
 *.dll
 
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
+# Статические библиотеки
 *.lai
 *.la
 *.a
 *.lib
 
-# Executables
+# Исполняемые файлы
 *.exe
 *.out
 *.app
 
-#IDK
-*.vsidx
-*.db
+# ---> Visual Studio (Специфичные для IDE)
+# Пользовательские настройки (не должны расшариваться между разработчиками)
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# Кэш и опции Visual Studio
+.vs/
+
+# Результаты сборки
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Автоматически сгенерированные файлы Visual Studio
+Generated\ Files/
+
+# Файлы, создаваемые в процессе сборки
+*_i.c
+*_p.c
+*_h.h
+*.ilk
+*.meta
+*.iobj
+*.ipdb
+*.pgc
+*.pgd
+*.rsp
+!Directory.Build.rsp
+*.sbr
+*.tlb
+*.tli
+*.tlh
+*.tmp
+*.tmp_proj
+*.log
+*.tlog
+*.vspscc
+*.vssscc
+.builds
+*.pidb
+*.svclog
+*.scc
+
+# Кэш Visual C++
+ipch/
+*.aps
+*.ncb
 *.opendb
-*.db-wal
+*.opensdf
+*.sdf
+*.cachefile
+*.VC.db
+*.VC.VC.opendb
+
+# Файлы профилировщика Visual Studio
+*.psess
+*.vsp
+*.vspx
+*.sap
+
+# Файлы трассировки Visual Studio
+*.e2e
+
+# ---> Прочее (Часто встречающиеся)
+# Результаты тестов
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+
+# Пакеты NuGet (если используются)
+*.nupkg
+*.snupkg
+**/packages/*
+!**/packages/build/
+
+# Локальные базы данных
+*.db
 *.db-shm
+*.db-wal
+
+# Временные файлы редакторов
+*.swp
+*~

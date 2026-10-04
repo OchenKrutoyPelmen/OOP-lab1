@@ -1,22 +1,27 @@
 #include <iostream>
 #include <string>
+#include <map>
 #include <vector>
 using namespace std;
 
+class Order;
+
 class User {
 private:
+	unsigned uid;
 	string name;
 	unsigned pos; // расстояние до ближайшего пункта выдачи (км)
-	// сюда нужно добаввить масси ссылок на заказы этого пользователя
+	map<unsigned, Order*> orders; //map ссылок на заказы этого пользователя
 public:
 	unsigned getPos();
+	void addOrder(Order* a);
 };
 
 unsigned User::getPos() {
 	return pos;
 }
 
-class Сourier {
+class Courier {
 private:
 	string name;
 	unsigned transport; // 1 - пеший, 2 - вылик, 3 - машина/мотоцикл
@@ -27,15 +32,15 @@ public:
 	void setB(bool a);
 };
 
-unsigned Сourier::getT() {
+unsigned Courier::getT() {
 	return transport;
 }
 
-unsigned Сourier::getB() {
+unsigned Courier::getB() {
 	return busy;
 }
 
-void Сourier::setB(bool a) {
+void Courier::setB(bool a) {
 	busy = a;
 }
 
@@ -62,30 +67,49 @@ unsigned Item::getP() {
 
 // база данных
 vector<User> users = {};
-vector<Сourier> couriers = {};
+vector<Courier> couriers = {};
 vector<Item> items = {};
 
 class Order {
 private:
-	unsigned num;
+	unsigned oid;
 	User user;
-	string address;
+	unsigned address; // тоже расстояние до ближайшего пунта выдачи
 	vector<Item> items;
 	unsigned cost;
 	unsigned delmet; // для способа доставки 1/2/3, 1 - стандарт, 2 - экспересс, 3 - самовывоз
-	Сourier courier;
+	Courier courier;
 	unsigned status; // кол-во часов до прибытия заказа
 public:
 	void addItem(Item a);
 	void getItems();
+	unsigned getOID();
 
 	bool setCourier(unsigned a); // выбор курьера для доставки
 	unsigned getCost();
 	unsigned getStatus();
+
+	void Create();
 };
+
+void Order::Create() {
+
+}
 
 void Order::addItem(Item a) {
 	items.push_back(a);
+}
+
+void Order::getItems() {
+	cout << "Заказ:" << endl;
+	for (unsigned i = 0; i < items.size(); i++)
+	{
+		cout << items[i].getN() << " | " << items[i].getQ() << " x " << items[i].getP() << " рублей" << endl;
+	}
+}
+
+unsigned Order::getOID() {
+	return oid;
 }
 
 bool Order::setCourier(unsigned a) {
@@ -114,14 +138,6 @@ bool Order::setCourier(unsigned a) {
 	}
 	cout << "свободных курьеров нет!" << endl;
 	return false;
-}
-
-void Order::getItems() {
-	cout << "Заказ:" << endl;
-	for (unsigned i = 0; i < items.size(); i++)
-	{
-		cout << items[i].getN() << " | " << items[i].getQ() << " x " << items[i].getP() << " рублей" << endl;
-	}
 }
 
 unsigned Order::getCost() {
@@ -175,8 +191,42 @@ unsigned Order::getStatus() {
 	return status;
 }
 
+void User::addOrder(Order* a) {
+	if (a) {
+		orders[a->getOID()] = a;
+	}
+}
+
 int main() {
 	setlocale(LC_ALL, "Russian");
+	unsigned num = 0;
+	unsigned temp = 0;
 
+	cout << "1. Сделать заказ" << endl;
+	cout << "2. Мои заказы" << endl;
+	cout << "3. Выйти" << endl;
+
+	unsigned userID = 1;
 	
+	while (temp != 1 and temp != 2 and temp != 3) {
+		cin >> temp;
+	}
+	
+	switch (temp)
+	{
+	case 1:
+	{
+		Order* myorder = new Order();
+		
+		// выбор продуктов и курьера, после вызов myorder.Create(), где будет подсчет всех элементов класса уже готовыми функциями setCourier, getCost, getStatus
+
+		users[userID].addOrder(myorder);
+		break;
+	}
+	case 2:
+		
+		break;
+	case 3:
+		break;
+	}
 }

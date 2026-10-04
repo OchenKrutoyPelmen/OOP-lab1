@@ -7,6 +7,7 @@ class User {
 private:
 	string name;
 	unsigned pos; // расстояние до ближайшего пункта выдачи (км)
+	// сюда нужно добаввить масси ссылок на заказы этого пользователя
 public:
 	unsigned getPos();
 };
@@ -38,9 +39,6 @@ void Сourier::setB(bool a) {
 	busy = a;
 }
 
-vector<User> users = {};
-vector<Сourier> couriers = {};
-
 class Item {
 private:
 	string name;
@@ -62,6 +60,11 @@ unsigned Item::getP() {
 	return price;
 }
 
+// база данных
+vector<User> users = {};
+vector<Сourier> couriers = {};
+vector<Item> items = {};
+
 class Order {
 private:
 	unsigned num;
@@ -76,7 +79,7 @@ public:
 	void addItem(Item a);
 	void getItems();
 
-	bool setCourier(unsigned a);
+	bool setCourier(unsigned a); // выбор курьера для доставки
 	unsigned getCost();
 	unsigned getStatus();
 };
@@ -162,7 +165,7 @@ unsigned Order::getStatus() {
 		break;
 	}
 
-	if (delivery == 1) {
+	if (delivery == 1) { // расчет времени на доставку от пунта выдачи до дома
 		if (courier.getT() == 1) temp += user.getPos() / 5;
 		else if (courier.getT() == 2) temp += user.getPos() / 15;
 		else if (courier.getT() == 3) temp += user.getPos() / 40;

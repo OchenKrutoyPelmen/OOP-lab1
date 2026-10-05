@@ -46,42 +46,44 @@ void Courier::setB(bool a) {
 
 class Item {
 private:
+	unsigned iid; // item id
 	string name;
-	unsigned quantity;
 	unsigned price;
 public:
 	string getN();
-	unsigned getQ();
 	unsigned getP();
+	unsigned getIID();
 };
 
 string Item::getN() {
 	return name;
 }
-unsigned Item::getQ() {
-	return quantity;
-}
+
 unsigned Item::getP() {
 	return price;
+}
+
+unsigned Item::getIID() {
+	return iid;
 }
 
 // база данных
 vector<User> users = {};
 vector<Courier> couriers = {};
-vector<Item> items = {};
+map<unsigned, Item> ITEMS = {};
 
 class Order {
 private:
 	unsigned oid;
-	User user;
+	User* user;
 	unsigned address; // тоже расстояние до ближайшего пунта выдачи
-	vector<Item> items;
+	map<unsigned, unsigned> items; // первый - item id, второй - его количество.
 	unsigned cost;
 	unsigned delmet; // для способа доставки 1/2/3, 1 - стандарт, 2 - экспересс, 3 - самовывоз
-	Courier courier;
+	Courier* courier;
 	unsigned status; // кол-во часов до прибытия заказа
 public:
-	void addItem(Item a);
+	void addItem(Item i, unsigned n);
 	void getItems();
 	unsigned getOID();
 
@@ -89,22 +91,28 @@ public:
 	unsigned getCost();
 	unsigned getStatus();
 
-	void Create();
+	void Create(unsigned id, User* u, unsigned del);
 };
 
-void Order::Create() {
+void Order::Create(unsigned id, User* u, unsigned del) {
+	oid = id;
+	user = u;
+	address = user->getPos();
+	delmet = del;
 
+	setCourier(delmet);
+	getCost();
+	getStatus();
 }
 
-void Order::addItem(Item a) {
-	items.push_back(a);
+void Order::addItem(Item i, unsigned n) {
+	items[i.getIID()] += n;
 }
 
 void Order::getItems() {
 	cout << "Заказ:" << endl;
-	for (unsigned i = 0; i < items.size(); i++)
-	{
-		cout << items[i].getN() << " | " << items[i].getQ() << " x " << items[i].getP() << " рублей" << endl;
+	for (auto& kv : items) {
+		cout << ITEMS[kv.first].getN() << " | " << kv.second << " x " << ITEMS[kv.first].getP() << " рублей" << endl;
 	}
 }
 
@@ -121,7 +129,7 @@ bool Order::setCourier(unsigned a) {
 			{
 				if (couriers[i].getB() == 0 and couriers[i].getT() < 3) {
 					couriers[i].setB(1);
-					courier = couriers[i];
+					*courier = couriers[i];
 					return true;
 				}
 			}
@@ -130,7 +138,7 @@ bool Order::setCourier(unsigned a) {
 		{
 			if (couriers[i].getB() == 0 and couriers[i].getT() == 3) {
 				couriers[i].setB(1);
-				courier = couriers[i];
+				*courier = couriers[i];
 				return true;
 			}
 		}
@@ -142,9 +150,8 @@ bool Order::setCourier(unsigned a) {
 
 unsigned Order::getCost() {
 	unsigned temp = 0;
-	for (unsigned i = 0; i < items.size(); i++)
-	{
-		temp += (items[i].getP() * items[i].getQ());
+	for (auto& kv : items) {
+		temp += (kv.second * ITEMS[kv.first].getP());
 	}
 	
 	switch (delmet)
@@ -182,9 +189,9 @@ unsigned Order::getStatus() {
 	}
 
 	if (delivery == 1) { // расчет времени на доставку от пунта выдачи до дома
-		if (courier.getT() == 1) temp += user.getPos() / 5;
-		else if (courier.getT() == 2) temp += user.getPos() / 15;
-		else if (courier.getT() == 3) temp += user.getPos() / 40;
+		if ((*courier).getT() == 1) temp += (*user).getPos() / 5;
+		else if ((*courier).getT() == 2) temp += (*user).getPos() / 15;
+		else if ((*courier).getT() == 3) temp += (*user).getPos() / 40;
 	}
 
 	status = temp;
@@ -199,34 +206,72 @@ void User::addOrder(Order* a) {
 
 int main() {
 	setlocale(LC_ALL, "Russian");
-	unsigned num = 0;
+
+	unsigned tempG = 0;
 	unsigned temp = 0;
+	unsigned OrderID = 0;
+	unsigned userID = 0;
 
-	cout << "1. Сделать заказ" << endl;
-	cout << "2. Мои заказы" << endl;
-	cout << "3. Выйти" << endl;
+	while (1) {
+		cout << "1. Сделать заказ" << endl;
+		cout << "2. Мои заказы" << endl;
+		cout << "3. Выйти" << endl;
 
-	unsigned userID = 1;
-	
-	while (temp != 1 and temp != 2 and temp != 3) {
-		cin >> temp;
+		while (tempG != 1 and tempG != 2 and tempG != 3) {
+			cin >> tempG;
+		}
+
+		switch (tempG)
+		{
+		case 1:
+		{
+			Order* myorder = new Order();
+
+			cout << "Каталог:" << endl;
+			unsigned tempiid = 0;
+			while (1) {
+				for (unsigned i = 1; i <= 8; i++)
+				{
+					if (tempiid == ITEMS.size()) break;
+					cout << i << ". " << ITEMS[tempiid].getN() << ": " << ITEMS[tempiid].getP() << " за шт." << endl;
+					tempiid++;
+				}
+				cout << "9. Назад" << endl;
+				if (tempiid < ITEMS.size()) cout << "0. Вперед" << endl;
+				if (tempiid > 8) tempiid -= 8;
+				else tempiid = 0;
+				cout << "Выберите товар: "; cin >> temp;
+				if (temp == 0 and tempiid < ITEMS.size()) {
+					tempiid += 8;
+				}
+				else if (temp == 1 and tempiid > 7) {
+					tempiid -= 8;
+				}
+				else if (temp == 1) {
+					break;
+				}
+				else if (temp >= 1 and temp <= 8 and temp < tempiid + ITEMS.size() - 1) {
+					// выбор количества
+					cout << "Выберите количество " << "\"" << ITEMS[tempiid].getN() << "\": "; cin >> temp;
+					myorder->addItem(ITEMS[tempiid], temp);
+				}
+				else {
+					cout << "Неверный ввод" << endl;
+				}
+			}
+
+			cout << "Выберите способ доставки(1 - стандарт, 2 - экспересс, 3 - самовывоз): "; cin >> temp;
+			while (temp != 1 and temp != 2 and temp != 3) cin >> temp;
+			
+			myorder->Create(OrderID, &users[userID], temp);
+			users[userID].addOrder(myorder);
+			OrderID++;
+			break;
+		}
+		case 2:
+			break;
+		}
+		if (tempG == 3) break;
 	}
 	
-	switch (temp)
-	{
-	case 1:
-	{
-		Order* myorder = new Order();
-		
-		// выбор продуктов и курьера, после вызов myorder.Create(), где будет подсчет всех элементов класса уже готовыми функциями setCourier, getCost, getStatus
-
-		users[userID].addOrder(myorder);
-		break;
-	}
-	case 2:
-		
-		break;
-	case 3:
-		break;
-	}
 }

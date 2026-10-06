@@ -17,7 +17,10 @@ public:
 	~User();
 
 	unsigned getPos();
+	string getName();
 	void addOrder(Order* a);
+	void getOrders();
+	bool isOrdersEmpty();
 };
 
 User::User(unsigned a, string b, unsigned c) {
@@ -33,8 +36,16 @@ User::~User() {
 	orders.clear();
 }
 
+bool User::isOrdersEmpty() {
+	return orders.empty();
+}
+
 unsigned User::getPos() {
 	return pos;
+}
+
+string User::getName() {
+	return name;
 }
 
 class Courier {
@@ -48,6 +59,7 @@ public:
 
 	unsigned getT();
 	unsigned getB();
+	string getName();
 	void setB(bool a);
 };
 
@@ -56,6 +68,10 @@ Courier::Courier(unsigned a, string b, unsigned c) {
 	name = b;
 	transport = c;
 	busy = 0;
+}
+
+string Courier::getName() {
+	return name;
 }
 
 unsigned Courier::getT() {
@@ -151,9 +167,23 @@ public:
 	bool setCourier(unsigned a); // выбор курьера для доставки
 	unsigned getCost();
 	unsigned getStatus();
+	User* getUser();
+	Courier* getCourier();
+	unsigned getDelmet();
 
 	void Create(unsigned id, User* u, unsigned del);
 };
+
+unsigned Order::getDelmet() {
+	return delmet;
+}
+
+User* Order::getUser() {
+	return user;
+}
+Courier* Order::getCourier() {
+	return courier;
+}
 
 bool Order::isItemsClear() {
 	return items.empty();
@@ -257,6 +287,22 @@ void User::addOrder(Order* a) {
 	}
 }
 
+void User::getOrders() {
+	for (auto& kv : orders) {
+		cout << "Заказ номер " << kv.first << ":" << endl;
+		cout << "Заказчик: " << kv.second->getUser()->getName() << endl;
+		if (kv.second->getDelmet() != 3) cout << "Курьер: " << kv.second->getCourier()->getName() << " ";
+		cout << "(";
+		if (kv.second->getDelmet() == 1) cout << "Стандартная доставка";
+		else if (kv.second->getDelmet() == 2) cout << "Экспресс доставка";
+		else if (kv.second->getDelmet() == 3) cout << "Самовывоз";
+		cout << ")" << endl;
+		kv.second->getItems();
+		cout << "Итого: " << kv.second->getCost() << " рублей" << endl;
+		cout << "Примерное время ожидания: " << kv.second->getStatus() << " часов" << endl << endl;
+	}
+}
+
 int main() {
 	setlocale(LC_ALL, "Russian");
 
@@ -291,17 +337,20 @@ int main() {
 					cout << i << ". " << ITEMS.at(tempiid).getN() << ": " << ITEMS.at(tempiid).getP() << " за шт." << endl;
 					tempiid++;
 				}
-				cout << "9. Назад" << endl;
+				if (tempiid > 8) cout << "9. Назад" << endl;
+				else cout << "9. Завершить" << endl;
 				if (tempiid < ITEMS.size()) cout << "0. Вперед" << endl;
-				if (tempiid > 8) tempiid -= 8;
+				if (tempiid > 8) {
+					if (tempiid % 8 == 0) tempiid -= 8;
+					else tempiid -= tempiid % 8;
+				}
 				else tempiid = 0;
 				cout << "Выберите товар: "; cin >> temp;
 				if (temp == 0 and tempiid < ITEMS.size()) {
 					tempiid += 8;
 				}
 				else if (temp == 9 and tempiid > 7) {
-					if (tempiid % 8 == 0) tempiid -= 8;
-					else tempiid -= tempiid % 8;
+					tempiid -= 8;
 				}
 				else if (temp == 9) {
 					break;
@@ -337,6 +386,9 @@ int main() {
 			break;
 		}
 		case 2:
+			cout << "Заказы пользователя " << users[userID].getName() << ":" << endl;
+			if (users[userID].isOrdersEmpty()) cout << "здесь пока пусто :(" << endl;
+			else users[userID].getOrders();
 			break;
 		}
 		if (tempG == 3) break;

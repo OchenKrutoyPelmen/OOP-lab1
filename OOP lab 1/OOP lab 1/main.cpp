@@ -5,6 +5,7 @@
 using namespace std;
 
 class Order;
+class DeliveryMethod;
 
 class User {
 private:
@@ -55,7 +56,7 @@ private:
 	unsigned transport; // 1 - пеший, 2 - вылик, 3 - машина/мотоцикл
 	bool busy; // 1 - занят другим заказом, 0 - свободен
 public:
-	Courier(unsigned a, string b, unsigned c);
+	Courier(unsigned a, string b, unsigned c, unsigned d);
 
 	unsigned getT();
 	unsigned getB();
@@ -63,11 +64,11 @@ public:
 	void setB(bool a);
 };
 
-Courier::Courier(unsigned a, string b, unsigned c) {
+Courier::Courier(unsigned a, string b, unsigned c, unsigned d) {
 	cid = a;
 	name = b;
 	transport = c;
-	busy = 0;
+	busy = d;
 }
 
 string Courier::getName() {
@@ -119,7 +120,7 @@ unsigned Item::getIID() {
 
 // база данных
 vector<User> users = { User(0, "Свет", 150), User(1, "Миша", 10), User(2, "Макс", 1000) };
-vector<Courier> couriers = { Courier(0, "Арсений", 1), Courier(2, "Артем", 2), Courier(3, "Ярик", 3) };
+vector<Courier> couriers = { Courier(0, "Арсений", 1, 0), Courier(2, "Артем", 2, 0), Courier(3, "Ярик", 3, 0) };
 map<unsigned, Item> ITEMS = {
 	{0,  Item(0,  "Яблоки",          120)},
 	{1,  Item(1,  "Бананы",           90)},
@@ -148,6 +149,62 @@ map<unsigned, Item> ITEMS = {
 	{24, Item(24, "Рыба (минтай)",   290)}
 };
 
+class DeliveryMethod {
+public:
+	virtual ~DeliveryMethod() = default;
+
+	virtual string getName() = 0;
+	virtual unsigned calculateCost(map<unsigned, unsigned>& items) = 0;
+	virtual unsigned calculateTime(User& user, Courier* courier) = 0;
+	virtual bool requiresCourier() = 0;
+};
+
+class StandardDelivery : public DeliveryMethod {
+public:
+	string getName() override { return "Стандартная доставка"; }
+	unsigned calculateCost(map<unsigned, unsigned>& items) override {
+		return 300; // цена за доставку
+	}
+	unsigned calculateTime(User& user, Courier* courier) override {
+		if (courier->getT() == 1) return user.getPos() / 5;
+		if (courier->getT() == 2) return user.getPos() / 15;
+		return user.getPos() / 40;
+	}
+	bool requiresCourier() override {
+		return true;
+	}
+};
+
+class ExpressDelivery : public DeliveryMethod {
+public:
+	string getName() override { return "Экспресс доставка"; }
+	unsigned calculateCost(map<unsigned, unsigned>& items) override {
+		return 450;
+	}
+	unsigned calculateTime(User& user, Courier* courier) override {
+		if (courier->getT() == 1) return user.getPos() / 5;
+		if (courier->getT() == 2) return user.getPos() / 15;
+		return user.getPos() / 40;
+	}
+	bool requiresCourier() override {
+		return true;
+	}
+};
+
+class PickupDelivery : public DeliveryMethod {
+public:
+	string getName() override { return "Самовывоз"; }
+	unsigned calculateCost(map<unsigned, unsigned>& items) override {
+		return 0;
+	}
+	unsigned calculateTime(User& user, Courier* courier) override {
+		return 0;
+	}
+	bool requiresCourier() override {
+		return false;
+	}
+};
+
 class Order {
 private:
 	unsigned oid;
@@ -155,10 +212,13 @@ private:
 	unsigned address; // тоже расстояние до ближайшего пунта выдачи
 	map<unsigned, unsigned> items; // первый - item id, второй - его количество.
 	unsigned cost;
-	unsigned delmet; // для способа доставки 1/2/3, 1 - стандарт, 2 - экспересс, 3 - самовывоз
+	DeliveryMethod* delivery;
 	Courier* courier;
 	unsigned status; // кол-во часов до прибытия заказа
 public:
+	Order();
+	~Order();
+
 	void addItem(Item i, unsigned n);
 	void getItems();
 	unsigned getOID();
@@ -169,13 +229,17 @@ public:
 	unsigned getStatus();
 	User* getUser();
 	Courier* getCourier();
-	unsigned getDelmet();
+	void setDelivery(DeliveryMethod* d);
+	string getDeliveryName();
+	bool getRequiresCourier();
 
 	void Create(unsigned id, User* u, unsigned del);
 };
 
-unsigned Order::getDelmet() {
-	return delmet;
+Order::Order() : delivery(nullptr), courier(nullptr), cost(0), status(0), oid(0), user(nullptr), address(0) {}
+
+Order::~Order() {
+	delete delivery;
 }
 
 User* Order::getUser() {
@@ -189,14 +253,30 @@ bool Order::isItemsClear() {
 	return items.empty();
 }
 
+void Order::setDelivery(DeliveryMethod* d) {
+	delete delivery;
+	delivery = d;
+}
+
+string Order::getDeliveryName() {
+	return delivery->getName();
+}
+
+bool Order::getRequiresCourier() {
+	return delivery->requiresCourier();
+}
+
 void Order::Create(unsigned id, User* u, unsigned del) {
 	oid = id;
 	user = u;
 	address = user->getPos();
-	delmet = del;
 	courier = nullptr;
 
-	setCourier(delmet);
+	if (delivery->requiresCourier()) {
+		if (!setCourier(del)) {
+			return;
+		}
+	}
 	getCost();
 	getStatus();
 }
@@ -240,7 +320,6 @@ bool Order::setCourier(unsigned a) {
 		}
 		temp = 1;
 	}
-	cout << "свободных курьеров нет!" << endl;
 	return false;
 }
 
@@ -249,35 +328,16 @@ unsigned Order::getCost() {
 	for (auto& kv : items) {
 		temp += (kv.second * ITEMS.at(kv.first).getP());
 	}
-	
-	switch (delmet)
-	{
-	case 1: // обычная доставка
-		temp += 300;
-		break;
-	case 2: // экспресс доставка
-		temp += 450;
-		break;
-	default: // самовывоз
-		break;
-	}
 
-	cost = temp;
+	cost = temp + delivery->calculateCost(items);
 	return cost;
 }
 
 unsigned Order::getStatus() {
 	unsigned temp = 0;
-	unsigned delivery = 0;
 	temp += 24; // стандартные 24 часа на доставку в пункт выдачи 
 
-	if ((delmet == 1 or delmet == 2) and courier != nullptr) { // расчет времени на доставку от пунта выдачи до дома
-		if ((*courier).getT() == 1) temp += (*user).getPos() / 5;
-		else if ((*courier).getT() == 2) temp += (*user).getPos() / 15;
-		else if ((*courier).getT() == 3) temp += (*user).getPos() / 40;
-	}
-
-	status = temp;
+	status = temp + delivery->calculateTime(*user, courier);
 	return status;
 }
 
@@ -291,12 +351,8 @@ void User::getOrders() {
 	for (auto& kv : orders) {
 		cout << "Заказ номер " << kv.first << ":" << endl;
 		cout << "Заказчик: " << kv.second->getUser()->getName() << endl;
-		if (kv.second->getDelmet() != 3) cout << "Курьер: " << kv.second->getCourier()->getName() << " ";
-		cout << "(";
-		if (kv.second->getDelmet() == 1) cout << "Стандартная доставка";
-		else if (kv.second->getDelmet() == 2) cout << "Экспресс доставка";
-		else if (kv.second->getDelmet() == 3) cout << "Самовывоз";
-		cout << ")" << endl;
+		if (kv.second->getRequiresCourier() and kv.second->getCourier() != nullptr) cout << "Курьер: " << kv.second->getCourier()->getName() << " ";
+		cout << "(" << kv.second->getDeliveryName() << ")" << endl;
 		kv.second->getItems();
 		cout << "Итого: " << kv.second->getCost() << " рублей" << endl;
 		cout << "Примерное время ожидания: " << kv.second->getStatus() << " часов" << endl << endl;
@@ -355,7 +411,7 @@ int main() {
 				else if (temp == 9) {
 					break;
 				}
-				else if (temp >= 1 and temp <= 8 and temp < tempiid + ITEMS.size() - 1) {
+				else if (temp >= 1 and temp <= 8 and (tempiid + temp - 1) < ITEMS.size()) {
 					cout << "Выберите количество " << "\"" << ITEMS.at(tempiid + temp - 1).getN() << "\": "; cin >> quantity;
 					if (quantity != 0) myorder->addItem(ITEMS.at(tempiid + temp - 1), quantity);
 				}
@@ -376,7 +432,22 @@ int main() {
 				cout << "Выберите способ доставки(1 - стандарт, 2 - экспересс, 3 - самовывоз): "; cin >> temp;
 			}
 
+			if (temp == 1) myorder->setDelivery(new StandardDelivery());
+			else if (temp == 2) myorder->setDelivery(new ExpressDelivery());
+			else if (temp == 3) myorder->setDelivery(new PickupDelivery());
+
 			myorder->Create(OrderID, &users[userID], temp);
+			if (temp != 3 and myorder->getCourier() == nullptr) {
+				cout << "Свободных курьеров нет, можете выбрать самовывоз (введите 1) или сделать заказ позже (введите 0): " ; cin >> temp;
+				if (temp == 1) {
+					myorder->setDelivery(new PickupDelivery());
+					myorder->Create(OrderID, &users[userID], 3);
+				}
+				else {
+					delete myorder;
+					break;
+				}
+			}
 			users[userID].addOrder(myorder);
 
 			cout << endl << "Итого: " << myorder->getCost() << " рублей" << endl;
@@ -393,6 +464,5 @@ int main() {
 		}
 		if (tempG == 3) break;
 		cout << endl;
-	}
-	
+	}	
 }

@@ -24,6 +24,17 @@ map<OrderStatus, vector<OrderStatus>> allowedTransitions = { // таблица переходо
 	{ OrderStatus::Cancelled,  {} }
 };
 
+string statusToStringStatic(OrderStatus s) {
+	switch (s) {
+	case OrderStatus::Created:    return "Создан";
+	case OrderStatus::Assembling: return "Собирается";
+	case OrderStatus::Delivering: return "В пути";
+	case OrderStatus::Delivered:  return "Доставлен";
+	case OrderStatus::Cancelled:  return "Отменён";
+	}
+	return "Неизвестно";
+}
+
 class User {
 private:
 	unsigned uid;
@@ -42,6 +53,7 @@ public:
 	bool changeOrderStatusToNext(unsigned oid);
 	bool isOrdersEmpty();
 	vector<unsigned> getOIDs();
+	Order* getOrderPtr(unsigned oid);
 };
 
 User::User(unsigned a, string b, unsigned c) {
@@ -133,7 +145,7 @@ unsigned Item::getIID() {
 
 // база данных
 vector<User> users = { User(0, "Свет", 150), User(1, "Миша", 10), User(2, "Макс", 1000) };
-vector<Courier> couriers = { Courier(0, "Арсений", 1, 1), Courier(2, "Артем", 2, 1), Courier(3, "Ярик", 3, 1) };
+vector<Courier> couriers = { Courier(0, "Арсений", 1, 0), Courier(2, "Артем", 2, 0), Courier(3, "Ярик", 3, 0) };
 map<unsigned, Item> ITEMS = {
 	{0,  Item(0,  "Яблоки",          120)},
 	{1,  Item(1,  "Бананы",           90)},
@@ -250,12 +262,17 @@ public:
 	bool getRequiresCourier();
 
 	void Create(unsigned id, User* u, unsigned del);
+	vector<OrderStatus> getAllowedTransitions();
 };
 
 Order::Order() : delivery(nullptr), courier(nullptr), cost(0), oid(0), user(nullptr), address(0), status(OrderStatus::Created) {}
 
 Order::~Order() {
 	delete delivery;
+}
+
+vector<OrderStatus> Order::getAllowedTransitions() {
+	return allowedTransitions[status];
 }
 
 bool Order::changeStatus(OrderStatus next) {
@@ -285,14 +302,7 @@ bool Order::moveToNextStatus() {
 }
 
 string Order::statusToString() {
-	switch (status) {
-	case OrderStatus::Created:    return "Создан";
-	case OrderStatus::Assembling: return "Собирается";
-	case OrderStatus::Delivering: return "В пути";
-	case OrderStatus::Delivered:  return "Доставлен";
-	case OrderStatus::Cancelled:  return "Отменён";
-	}
-	return "Неизвестно";
+	return statusToStringStatic(status);
 }
 
 User* Order::getUser() {
@@ -424,132 +434,232 @@ bool User::changeOrderStatusToNext(unsigned oid) {
 	return orders[oid]->moveToNextStatus();
 }
 
+Order* User::getOrderPtr(unsigned oid) {
+	auto it = orders.find(oid);
+	return (it != orders.end()) ? it->second : nullptr;
+}
+
+class ConsoleUI {
+private:
+	unsigned currentUserId = 0;
+	unsigned nextOrderId = 0;
+
+	unsigned readUnsigned(const string& prompt) {
+		unsigned value;
+		while (true) {
+			cout << prompt;
+			if (cin >> value) return value;
+			cin.clear();
+			cin.ignore(10000, '\n');
+			cout << "Неверный ввод. Попробуйте снова." << endl;
+		}
+	}
+
+	int readInt(const string& prompt) {
+		int value;
+		while (true) {
+			cout << prompt;
+			if (cin >> value) return value;
+			cin.clear();
+			cin.ignore(10000, '\n');
+			cout << "Неверный ввод. Попробуйте снова." << endl;
+		}
+	}
+
+	void showMainMenu() {
+		cout << endl;
+		cout << "=== Меню ===" << endl;
+		cout << "1. Создать заказ" << endl;
+		cout << "2. Мои заказы" << endl;
+		cout << "3. Выйти" << endl;
+	}
+
+	void createOrder() {
+		Order* myorder = new Order();
+
+		cout << endl << "Каталог:" << endl;
+		unsigned page = 0;
+
+		unsigned startIdx; //индекс первого элемента на странице
+		unsigned endIdx;   //индекс последнего элемента на странице
+		unsigned choice;   //номер выбранного товара (из предоставленных в UI)
+		unsigned itemIdx;  //реальный id выбранного товара
+		unsigned qty;      //выбранное количество товара
+		while (true) {
+			startIdx = page * 8;
+			endIdx = min(startIdx + 8, (unsigned)ITEMS.size());
+
+			for (unsigned i = startIdx; i < endIdx; i++) {
+				cout << (i - startIdx + 1) << ". " << ITEMS.at(i).getN() << ": " << ITEMS.at(i).getP() << " за шт." << endl;
+			}
+
+			if (page > 0) cout << "9. Назад" << endl;
+			else cout << "9. Завершить" << endl;
+			if (endIdx < ITEMS.size()) cout << "0. Вперед" << endl;
+
+			choice = readUnsigned("Выберите товар: ");
+
+			if (choice == 0 && endIdx < ITEMS.size()) {
+				page++;
+			}
+			else if (choice == 9 && page > 0) {
+				page--;
+			}
+			else if (choice == 9) {
+				break;
+			}
+			else if (choice >= 1 && choice <= 8 && (startIdx + choice - 1) < ITEMS.size()) {
+				itemIdx = startIdx + choice - 1;
+				cout << "Выберите количество \"" << ITEMS.at(itemIdx).getN() << "\": ";
+				qty = readUnsigned("");
+				if (qty != 0) myorder->addItem(ITEMS.at(itemIdx), qty);
+			}
+			else {
+				cout << "Неверный ввод" << endl;
+			}
+		}
+
+		if (myorder->isItemsClear()) {
+			delete myorder;
+			return;
+		}
+
+		cout << endl;
+		myorder->getItems();
+
+		unsigned del = 0;
+		while (del < 1 || del > 3) {
+			del = readUnsigned(
+				"Выберите способ доставки (1 - стандарт, 2 - экспресс, 3 - самовывоз): ");
+		}
+
+		if (del == 1) myorder->setDelivery(new StandardDelivery());
+		else if (del == 2) myorder->setDelivery(new ExpressDelivery());
+		else myorder->setDelivery(new PickupDelivery());
+
+		myorder->Create(nextOrderId, &users[currentUserId], del);
+
+		// Если все курьеры заняты — предложить самовывоз или отменить
+		if (del != 3 && myorder->getCourier() == nullptr) {
+			unsigned response = 2;
+			while (response != 0 && response != 1) {
+				response = readUnsigned(
+					"Свободных курьеров нет. Выбрать самовывоз (1) или отменить заказ (0): ");
+			}
+			if (response == 1) {
+				myorder->setDelivery(new PickupDelivery());
+				myorder->Create(nextOrderId, &users[currentUserId], 3);
+			}
+			else {
+				delete myorder;
+				return;
+			}
+		}
+
+		users[currentUserId].addOrder(myorder);
+		nextOrderId++;
+
+		cout << endl << "Заказ успешно создан!" << endl;
+		myorder->getItems();
+		cout << "Способ доставки: " << myorder->getDeliveryName() << endl;
+		if (myorder->getCourier() != nullptr) {
+			cout << "Курьер: " << myorder->getCourier()->getName() << endl;
+		}
+		cout << "Итого: " << myorder->getCost() << " рублей" << endl;
+		cout << "Статус: " << myorder->statusToString() << endl;
+	}
+
+	void showOrders() {
+		cout << endl;
+		if (users[currentUserId].isOrdersEmpty()) {
+			cout << "Здесь пока пусто :(" << endl;
+			return;
+		}
+
+		vector<unsigned> OIDs = users[currentUserId].getOIDs();
+		int choice;
+
+		while (true) {
+			cout << "=== Заказы пользователя " << users[currentUserId].getName() << " ===" << endl;
+
+			for (unsigned i = 0; i < OIDs.size(); i++) {
+				Order* o = users[currentUserId].getOrderPtr(OIDs[i]);
+				cout << "[" << i << "] Заказ #" << o->getOID() << " — " << o->getDeliveryName() << " — Статус: " << o->statusToString() << " — " << o->getCost() << " руб." << endl;
+			}
+			cout << "[-1] Назад" << endl;
+
+			choice = readInt("Выберите заказ: ");
+			if (choice == -1) return;
+			if (choice < 0 || choice >= (int)OIDs.size()) {
+				cout << "Неверный ввод" << endl;
+				continue;
+			}
+
+			Order* order = users[currentUserId].getOrderPtr(OIDs[choice]);
+			if (order == nullptr) {
+				cout << "Заказ не найден" << endl;
+				continue;
+			}
+			orderMenu(order);
+		}
+	}
+
+	void orderMenu(Order* order) {
+		while (true) {
+			cout << endl;
+			users[currentUserId].getOrder(order->getOID());
+
+			vector<OrderStatus> allowed = order->getAllowedTransitions();
+			if (allowed.empty()) {
+				cout << "Заказ завершён, действия недоступны." << endl;
+				cout << "0. Назад" << endl;
+				readInt("");
+				return;
+			}
+
+			cout << "Доступные действия:" << endl;
+			for (size_t i = 0; i < allowed.size(); i++) {
+				cout << (i + 1) << ". Перевести в статус: "
+					<< statusToStringStatic(allowed[i]) << endl;
+			}
+			cout << "0. Назад" << endl;
+
+			int choice = readInt("Выбор: ");
+			if (choice == 0) return;
+			if (choice < 1 || choice >(int)allowed.size()) {
+				cout << "Неверный ввод" << endl;
+				continue;
+			}
+
+			if (!order->changeStatus(allowed[choice - 1])) {
+				cout << "Нельзя перевести заказ в этот статус" << endl;
+			}
+			else {
+				cout << "Новый статус: " << order->statusToString() << endl;
+			}
+		}
+	}
+
+	public:
+		void run() {
+			while (true) {
+				showMainMenu();
+				unsigned choice = readUnsigned("Выбор: ");
+				switch (choice) {
+				case 1: createOrder(); break;
+				case 2: showOrders();  break;
+				case 3: return;
+				default: cout << "Неверный ввод" << endl;
+				}
+			}
+		}
+};
+
 int main() {
 	setlocale(LC_ALL, "Russian");
 
-	unsigned tempG = 0;
-	unsigned temp = 0;
-	unsigned quantity = 0;
-	unsigned OrderID = 0;
-	unsigned userID = 0;
-	unsigned tempO = 0;
+	ConsoleUI ui;
+    ui.run();
 
-	while (1) {
-		cout << "1. Сделать заказ" << endl;
-		cout << "2. Мои заказы" << endl;
-		cout << "3. Выйти" << endl;
-
-		tempG = 0;
-		while (tempG != 1 and tempG != 2 and tempG != 3) {
-			cin >> tempG;
-		}
-
-		switch (tempG)
-		{
-		case 1:
-		{
-			Order* myorder = new Order();
-
-			cout << "Каталог:" << endl;
-			unsigned tempiid = 0;
-			while (1) {
-				for (unsigned i = 1; i <= 8; i++)
-				{
-					if (tempiid == ITEMS.size()) break;
-					cout << i << ". " << ITEMS.at(tempiid).getN() << ": " << ITEMS.at(tempiid).getP() << " за шт." << endl;
-					tempiid++;
-				}
-				if (tempiid > 8) cout << "9. Назад" << endl;
-				else cout << "9. Завершить" << endl;
-				if (tempiid < ITEMS.size()) cout << "0. Вперед" << endl;
-				if (tempiid > 8) {
-					if (tempiid % 8 == 0) tempiid -= 8;
-					else tempiid -= tempiid % 8;
-				}
-				else tempiid = 0;
-				cout << "Выберите товар: "; cin >> temp;
-				if (temp == 0 and tempiid < ITEMS.size()) {
-					tempiid += 8;
-				}
-				else if (temp == 9 and tempiid > 7) {
-					tempiid -= 8;
-				}
-				else if (temp == 9) {
-					break;
-				}
-				else if (temp >= 1 and temp <= 8 and (tempiid + temp - 1) < ITEMS.size()) {
-					cout << "Выберите количество " << "\"" << ITEMS.at(tempiid + temp - 1).getN() << "\": "; cin >> quantity;
-					if (quantity != 0) myorder->addItem(ITEMS.at(tempiid + temp - 1), quantity);
-				}
-				else {
-					cout << "Неверный ввод" << endl;
-				}
-			}
-
-			if (myorder->isItemsClear()) {
-				delete myorder;
-				break;
-			}
-
-			cout << endl;
-			myorder->getItems();
-			
-			while (temp != 1 and temp != 2 and temp != 3) {
-				cout << "Выберите способ доставки(1 - стандарт, 2 - экспересс, 3 - самовывоз): "; cin >> temp;
-			}
-
-			if (temp == 1) myorder->setDelivery(new StandardDelivery());
-			else if (temp == 2) myorder->setDelivery(new ExpressDelivery());
-			else if (temp == 3) myorder->setDelivery(new PickupDelivery());
-
-			myorder->Create(OrderID, &users[userID], temp);
-			if (temp != 3 and myorder->getCourier() == nullptr) {
-				cout << "Свободных курьеров нет, можете выбрать самовывоз (введите 1) или сделать заказ позже (введите 0): " ; cin >> temp;
-				if (temp == 1) {
-					myorder->setDelivery(new PickupDelivery());
-					myorder->Create(OrderID, &users[userID], 3);
-				}
-				else {
-					delete myorder;
-					break;
-				}
-			}
-			users[userID].addOrder(myorder);
-
-			cout << endl << "Итого: " << myorder->getCost() << " рублей" << endl;
-			cout << "Статус: " << myorder->statusToString() << endl;
-			
-			OrderID++;
-			break;
-		}
-		case 2:
-			cout << "Заказы пользователя " << users[userID].getName() << ":" << endl << endl;
-			if (users[userID].isOrdersEmpty()) cout << "здесь пока пусто :(" << endl;
-			else {
-				vector<unsigned> OIDs = users[userID].getOIDs();
-				tempO = 0;
-				
-				while (1)
-				{
-					users[userID].getOrder(OIDs[tempO]);
-					if (tempO != 0) cout << "1. Назад" << endl;
-					else cout << "1. Завершить просмотр заказов" << endl;
-					if(tempO < OIDs.size() - 1) cout << "2. Вперед" << endl;
-					cout << "3. Изменить статус заказы на следующий" << endl;
-					cout << "4. Отменить заказ" << endl;
-					cin >> temp;
-
-					if (temp == 1 and tempO == 0) break;
-					else if (temp == 1) tempO -= 1;
-					else if (temp == 2 and tempO < OIDs.size() - 1) tempO += 1;
-					else if (temp == 3 and users[userID].changeOrderStatusToNext(OIDs[tempO]));
-					else if (temp == 4 and users[userID].changeOrderStatus(OIDs[tempO], OrderStatus::Cancelled));
-					else if (temp == 3 or temp == 4) cout << endl << "=== Заказ уже завершён или отменён ===" << endl;
-				}
-			}
-			break;
-		}
-		if (tempG == 3) break;
-		cout << endl;
-	}	
+    return 0;	
 }

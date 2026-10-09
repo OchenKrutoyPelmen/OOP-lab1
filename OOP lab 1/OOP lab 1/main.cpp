@@ -2,10 +2,27 @@
 #include <string>
 #include <map>
 #include <vector>
+#include <algorithm>
 using namespace std;
 
 class Order;
 class DeliveryMethod;
+
+enum class OrderStatus {
+	Created,
+	Assembling,
+	Delivering,
+	Delivered,
+	Cancelled
+};
+
+map<OrderStatus, vector<OrderStatus>> allowedTransitions = { // таблица переходов для этих статусов
+	{ OrderStatus::Created,    { OrderStatus::Assembling, OrderStatus::Cancelled } },
+	{ OrderStatus::Assembling, { OrderStatus::Delivering, OrderStatus::Cancelled } },
+	{ OrderStatus::Delivering, { OrderStatus::Delivered } },
+	{ OrderStatus::Delivered,  {} },
+	{ OrderStatus::Cancelled,  {} }
+};
 
 class User {
 private:
@@ -20,21 +37,17 @@ public:
 	unsigned getPos();
 	string getName();
 	void addOrder(Order* a);
-	void getOrders();
+	void getOrder(unsigned oid);
+	bool changeOrderStatus(unsigned oid, OrderStatus newStatus);
+	bool changeOrderStatusToNext(unsigned oid);
 	bool isOrdersEmpty();
+	vector<unsigned> getOIDs();
 };
 
 User::User(unsigned a, string b, unsigned c) {
 	uid = a;
 	name = b;
 	pos = c;
-}
-
-User::~User() {
-	for (auto& kv : orders) {
-		delete kv.second;
-	}
-	orders.clear();
 }
 
 bool User::isOrdersEmpty() {
@@ -120,7 +133,7 @@ unsigned Item::getIID() {
 
 // база данных
 vector<User> users = { User(0, "Свет", 150), User(1, "Миша", 10), User(2, "Макс", 1000) };
-vector<Courier> couriers = { Courier(0, "Арсений", 1, 0), Courier(2, "Артем", 2, 0), Courier(3, "Ярик", 3, 0) };
+vector<Courier> couriers = { Courier(0, "Арсений", 1, 1), Courier(2, "Артем", 2, 1), Courier(3, "Ярик", 3, 1) };
 map<unsigned, Item> ITEMS = {
 	{0,  Item(0,  "Яблоки",          120)},
 	{1,  Item(1,  "Бананы",           90)},
@@ -214,7 +227,7 @@ private:
 	unsigned cost;
 	DeliveryMethod* delivery;
 	Courier* courier;
-	unsigned status; // кол-во часов до прибытия заказа
+	OrderStatus status;
 public:
 	Order();
 	~Order();
@@ -223,10 +236,13 @@ public:
 	void getItems();
 	unsigned getOID();
 	bool isItemsClear();
+	OrderStatus getStatus();
+	bool changeStatus(OrderStatus newStatus);
+	bool moveToNextStatus();
+	string statusToString();
 
 	bool setCourier(unsigned a); // выбор курьера для доставки
 	unsigned getCost();
-	unsigned getStatus();
 	User* getUser();
 	Courier* getCourier();
 	void setDelivery(DeliveryMethod* d);
@@ -236,10 +252,47 @@ public:
 	void Create(unsigned id, User* u, unsigned del);
 };
 
-Order::Order() : delivery(nullptr), courier(nullptr), cost(0), status(0), oid(0), user(nullptr), address(0) {}
+Order::Order() : delivery(nullptr), courier(nullptr), cost(0), oid(0), user(nullptr), address(0), status(OrderStatus::Created) {}
 
 Order::~Order() {
 	delete delivery;
+}
+
+bool Order::changeStatus(OrderStatus next) {
+	auto& allowed = allowedTransitions[status];
+	if (find(allowed.begin(), allowed.end(), next) == allowed.end()) {
+		return false;
+	}
+	if (next == OrderStatus::Cancelled || next == OrderStatus::Delivered) {
+		if (courier != nullptr) {
+			courier->setB(false);
+			courier = nullptr;
+		}
+	}
+	status = next;
+	return true;
+}
+
+bool Order::moveToNextStatus() {
+	switch (status) {
+	case OrderStatus::Created: return changeStatus(OrderStatus::Assembling);
+	case OrderStatus::Assembling: return changeStatus(OrderStatus::Delivering);
+	case OrderStatus::Delivering: return changeStatus(OrderStatus::Delivered);
+	case OrderStatus::Delivered: return false;
+	case OrderStatus::Cancelled: return false;
+	}
+	return false;
+}
+
+string Order::statusToString() {
+	switch (status) {
+	case OrderStatus::Created:    return "Создан";
+	case OrderStatus::Assembling: return "Собирается";
+	case OrderStatus::Delivering: return "В пути";
+	case OrderStatus::Delivered:  return "Доставлен";
+	case OrderStatus::Cancelled:  return "Отменён";
+	}
+	return "Неизвестно";
 }
 
 User* Order::getUser() {
@@ -278,7 +331,6 @@ void Order::Create(unsigned id, User* u, unsigned del) {
 		}
 	}
 	getCost();
-	getStatus();
 }
 
 void Order::addItem(Item i, unsigned n) {
@@ -333,12 +385,11 @@ unsigned Order::getCost() {
 	return cost;
 }
 
-unsigned Order::getStatus() {
-	unsigned temp = 0;
-	temp += 24; // стандартные 24 часа на доставку в пункт выдачи 
-
-	status = temp + delivery->calculateTime(*user, courier);
-	return status;
+User::~User() {
+	for (auto& kv : orders) {
+		delete kv.second;
+	}
+	orders.clear();
 }
 
 void User::addOrder(Order* a) {
@@ -347,16 +398,30 @@ void User::addOrder(Order* a) {
 	}
 }
 
-void User::getOrders() {
+vector<unsigned> User::getOIDs() {
+	vector<unsigned> oids = {};
 	for (auto& kv : orders) {
-		cout << "Заказ номер " << kv.first << ":" << endl;
-		cout << "Заказчик: " << kv.second->getUser()->getName() << endl;
-		if (kv.second->getRequiresCourier() and kv.second->getCourier() != nullptr) cout << "Курьер: " << kv.second->getCourier()->getName() << " ";
-		cout << "(" << kv.second->getDeliveryName() << ")" << endl;
-		kv.second->getItems();
-		cout << "Итого: " << kv.second->getCost() << " рублей" << endl;
-		cout << "Примерное время ожидания: " << kv.second->getStatus() << " часов" << endl << endl;
+		oids.push_back(kv.first);
 	}
+	return oids;
+}
+
+void User::getOrder(unsigned oid) {
+	cout << endl << "Заказ номер " << oid << ":" << endl;
+	cout << "Заказчик: " << orders[oid]->getUser()->getName() << endl;
+	if (orders[oid]->getRequiresCourier() and orders[oid]->getCourier() != nullptr) cout << "Курьер: " << orders[oid]->getCourier()->getName() << " ";
+	cout << "(" << orders[oid]->getDeliveryName() << ")" << endl;
+	orders[oid]->getItems();
+	cout << "Итого: " << orders[oid]->getCost() << " рублей" << endl;
+	cout << "Статус: " << orders[oid]->statusToString() << endl << endl;
+}
+
+bool User::changeOrderStatus(unsigned oid, OrderStatus newStatus) {
+	return orders[oid]->changeStatus(newStatus);
+}
+
+bool User::changeOrderStatusToNext(unsigned oid) {
+	return orders[oid]->moveToNextStatus();
 }
 
 int main() {
@@ -367,6 +432,7 @@ int main() {
 	unsigned quantity = 0;
 	unsigned OrderID = 0;
 	unsigned userID = 0;
+	unsigned tempO = 0;
 
 	while (1) {
 		cout << "1. Сделать заказ" << endl;
@@ -451,15 +517,36 @@ int main() {
 			users[userID].addOrder(myorder);
 
 			cout << endl << "Итого: " << myorder->getCost() << " рублей" << endl;
-			cout << "Примерное время ожидания: " << myorder->getStatus() << " часов" << endl;
+			cout << "Статус: " << myorder->statusToString() << endl;
 			
 			OrderID++;
 			break;
 		}
 		case 2:
-			cout << "Заказы пользователя " << users[userID].getName() << ":" << endl;
+			cout << "Заказы пользователя " << users[userID].getName() << ":" << endl << endl;
 			if (users[userID].isOrdersEmpty()) cout << "здесь пока пусто :(" << endl;
-			else users[userID].getOrders();
+			else {
+				vector<unsigned> OIDs = users[userID].getOIDs();
+				tempO = 0;
+				
+				while (1)
+				{
+					users[userID].getOrder(OIDs[tempO]);
+					if (tempO != 0) cout << "1. Назад" << endl;
+					else cout << "1. Завершить просмотр заказов" << endl;
+					if(tempO < OIDs.size() - 1) cout << "2. Вперед" << endl;
+					cout << "3. Изменить статус заказы на следующий" << endl;
+					cout << "4. Отменить заказ" << endl;
+					cin >> temp;
+
+					if (temp == 1 and tempO == 0) break;
+					else if (temp == 1) tempO -= 1;
+					else if (temp == 2 and tempO < OIDs.size() - 1) tempO += 1;
+					else if (temp == 3 and users[userID].changeOrderStatusToNext(OIDs[tempO]));
+					else if (temp == 4 and users[userID].changeOrderStatus(OIDs[tempO], OrderStatus::Cancelled));
+					else if (temp == 3 or temp == 4) cout << endl << "=== Заказ уже завершён или отменён ===" << endl;
+				}
+			}
 			break;
 		}
 		if (tempG == 3) break;

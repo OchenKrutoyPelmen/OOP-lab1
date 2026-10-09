@@ -484,7 +484,7 @@ private:
 		unsigned endIdx;   //индекс последнего элемента на странице
 		unsigned choice;   //номер выбранного товара (из предоставленных в UI)
 		unsigned itemIdx;  //реальный id выбранного товара
-		unsigned qty;      //выбранное количество товара
+		unsigned qty = 0;      //выбранное количество товара
 		while (true) {
 			startIdx = page * 8;
 			endIdx = min(startIdx + 8, (unsigned)ITEMS.size());
@@ -510,8 +510,16 @@ private:
 			}
 			else if (choice >= 1 && choice <= 8 && (startIdx + choice - 1) < ITEMS.size()) {
 				itemIdx = startIdx + choice - 1;
+
 				cout << "Выберите количество \"" << ITEMS.at(itemIdx).getN() << "\": ";
 				qty = readUnsigned("");
+
+				while (qty > 10000) {
+					cout << "Слишком большое количество" << endl;
+					cout << "Выберите количество \"" << ITEMS.at(itemIdx).getN() << "\": ";
+					qty = readUnsigned("");
+				}
+
 				if (qty != 0) myorder->addItem(ITEMS.at(itemIdx), qty);
 			}
 			else {
